@@ -93,12 +93,5 @@
     "minimum-stability": "stable",
     "prefer-stable": true,
     "repositories": {
-        "local": {
-            "type": "path",
-            "url": "./packages/invent-IFTO/laravel-components",
-            "options": {
-                "symlink": true
-            }
-        }
     }
 }
