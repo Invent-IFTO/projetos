@@ -22,7 +22,16 @@
 <script>
 
     $(() => {
-        $('#{{ $id }}').select2( @json($config) );
+        // Configuração padrão em português
+        let defaultConfig = {
+            language: 'pt-BR',
+            theme: 'bootstrap4'
+        };
+        
+        // Mesclar configuração padrão com a configuração personalizada
+        let config = Object.assign(defaultConfig, @json($config));
+        
+        $('#{{ $id }}').select2(config);
 
         // Add support to auto select old submitted values in case of
         // validation errors.

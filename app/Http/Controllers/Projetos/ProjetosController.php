@@ -3,130 +3,143 @@
 namespace App\Http\Controllers\Projetos;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\EnviarConviteProjeto;
 use App\Models\Projeto;
 use App\Models\ProjetoAtividade;
+use App\Models\ProjetoConvite;
+use App\Models\ProjetoEquipe;
+use App\Models\ProjetoMembro;
+use App\Models\User;
 use Auth;
+use DB;
 use Illuminate\Http\Request;
 
 class ProjetosController extends Controller
 {
-
     public function listar()
     {
         $projetos = Projeto::all();
         return view('projetos.gestao.index', compact('projetos'));
     }
 
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function nova(Projeto $projeto)
+    public function novo()
     {
-        return view('projetos.atividades.nova', compact('projeto'));
-    }
-    public function show(Projeto $projeto, ProjetoAtividade $atividade)
-    {
-        $this->authorize('view', $atividade);
-        if($atividade->trashed()){
-            $this->authorize('restore', $atividade);
-        }
-        return view('projetos.atividades.show', compact('atividade'));
+        return view('projetos.gestao.novo');
     }
 
-    public function criar(Projeto $projeto, Request $request)
+    public function show(Projeto $projeto)
+    {
+        return view('projetos.gestao.show', compact('projeto'));
+    }
+
+    public function criar(Request $request)
     {
         $request->validate([
-            'anterior' => 'required|string',
-            'atual' => 'required|string',
-            'problemas' => 'required|string',
+            'titulo' => 'required|string|max:255',
+            'descricao' => 'nullable|string',
         ]);
 
-        $atividade = $projeto->atividades()->create([
-            'anterior' => $request->anterior,
-            'atual' => $request->atual,
-            'problemas' => $request->problemas,
-            'projeto_membro_id' => $projeto->membroId(Auth::user()->id),
+        $projeto = Projeto::create([
+            'titulo' => $request->titulo,
+            'descricao' => $request->descricao,
+            'criador_id' => Auth::id(),
         ]);
 
-        return redirect()->route('projetos.atividades.index', ['projeto' => $projeto])->with('success', 'Atividade criada com sucesso.');
+        return redirect()->route('projetos.show', ['projeto' => $projeto])->with('success', 'Projeto criado com sucesso!');
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function editar(Projeto $projeto, ProjetoAtividade $atividade)
+    public function promoverLider(Projeto $projeto, ProjetoMembro $membro)
     {
-        // Verifica se o usuário pode editar como responsável
-        $this->authorize('responsavel_edit', $atividade);
-
-        return view('projetos.atividades.edit', compact('projeto', 'atividade'));
+        $membro->lider_equipe = true;
+        $membro->save();
+        return redirect()->route('projetos.show', ['projeto' => $membro->projeto])->with('success', 'Membro promovido a líder de equipe com sucesso!');
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function alterar(Request $request, Projeto $projeto, ProjetoAtividade $atividade)
+    public function promoverGerente(Projeto $projeto, ProjetoMembro $membro)
     {
-        // Verifica se o usuário pode editar como responsável
-        $this->authorize('responsavel_edit', $atividade);
+        $membro->gerente_projeto = true;
+        $membro->save();
+        return redirect()->route('projetos.show', ['projeto' => $membro->projeto])->with('success', 'Membro promovido a gerente do projeto com sucesso!');
+    }
 
+    public function removerMembro(Projeto $projeto, ProjetoMembro $membro)
+    {
+        $membro->delete();
+        return redirect()->route('projetos.show', ['projeto' => $membro->projeto])->with('success', 'Membro removido do projeto com sucesso!');
+    }
+
+    public function criarMembro(Projeto $projeto)
+    {
+        $users_disponiveis = User::whereNotIn('id', $projeto->membros->pluck('user_id'))->pluck(DB::raw("CONCAT(name, ' (', email, ')') AS name_email"), 'id')->toArray(); // Substitua por sua lógica para obter os usuários disponíveis
+        return view('projetos.gestao.modals.membros-add', compact('projeto', 'users_disponiveis'));
+    }
+    public function editarMembro(Projeto $projeto, ProjetoMembro $membro)
+    {
+        return view('projetos.gestao.modals.membros-edit', compact('projeto', 'membro'));
+    }
+
+    public function alterarMembro(Projeto $projeto, ProjetoMembro $membro, Request $request)
+    {
         $request->validate([
-            'anterior' => 'required|string',
-            'atual' => 'required|string',
-            'problemas' => 'required|string',
+            'equipe' => 'required|string|max:255',
         ]);
-
-        $atividade->update([
-            'anterior' => $request->anterior,
-            'atual' => $request->atual,
-            'problemas' => $request->problemas,
-        ]);
-
-        return redirect()->route('projetos.atividades.index', ['projeto' => $projeto])
-            ->with('success', 'Atividade atualizada com sucesso.');
+        $membro->equipe_id = $projeto->equipes()->firstOrCreate(['descricao' => $request->equipe])->id;
+        $membro->lider_equipe = $request->has('lider');
+        $membro->gerente_projeto = $request->has('gerente');
+        $membro->save();
+        return redirect()->route('projetos.show', ['projeto' => $membro->projeto])->with('success', 'Membro alterado com sucesso!');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function deletar(Projeto $projeto, ProjetoAtividade $atividade)
+    public function inserirMembro(Projeto $projeto, Request $request)
     {
-        // Usa a policy de delete (responsável ou dono do projeto)
-        $this->authorize('delete', $atividade);
-        if ($atividade->status === 'verificada') {
-            $atividade->delete();
+        $request->validate([
+            'usuario' => 'required|string',
+            'equipe' => 'required|string|max:255',
+        ]);
+        if (is_numeric($request->usuario)) {
+            $request->validate([
+                'usuario' => 'exists:users,id',
+            ]);
+            $membro =  new ProjetoMembro();
+            $membro->projeto_id = $projeto->id;
+            $membro->user_id = $request->usuario;
+            $membro->equipe_id = $projeto->equipes()->firstOrCreate(['descricao' => $request->equipe])->id;
+            $membro->lider_equipe = $request->has('lider');
+            $membro->gerente_projeto = $request->has('gerente');
+            $membro->save();
+             return redirect()->route('projetos.show', ['projeto' => $membro->projeto])->with('success', 'Membro adicionado ao projeto com sucesso!');
         } else {
-            $atividade->forceDelete();
+            return $this->convidarMembro($projeto, $request);
         }
-        return redirect()->route('projetos.atividades.index', ['projeto' => $projeto])
-            ->with('success', 'Atividade excluída com sucesso.');
+       
     }
 
-    /**
-     * Restore the specified soft-deleted resource.
-     */
-    public function restaurar(Projeto $projeto, ProjetoAtividade $atividade)
+    private function convidarMembro(Projeto $projeto, Request $request)
     {
-        $this->authorize('restore', $atividade);
+        $request->validate([
+            'usuario' => 'email|required|unique:users,email',
+        ]);
 
-        $atividade->restore();
+        $equipe = ProjetoEquipe::firstOrCreate([
+            'descricao' => $request->equipe,
+            'projeto_id' => $projeto->id
+        ]);
 
-        return redirect()->route('projetos.atividades.index', ['projeto' => $projeto])
-            ->with('success', 'Atividade restaurada com sucesso.');
+        $convite = $equipe->convites()->create([
+            'responsavel_convite_id' => Auth::id(),
+            'email' => $request->usuario,
+        ]);
+
+        // Enfileirar o job para enviar o e-mail de convite
+        EnviarConviteProjeto::dispatch($convite);
+
+        return redirect()->route('projetos.show', ['projeto' => $projeto])->with('success', 'Convite enviado para o email do usuário!');
     }
 
-    /**
-     * Permanently delete the specified resource.
-     */
-    public function confirmeDelete(Projeto $projeto, ProjetoAtividade $atividade)
+
+    public function editarEquipe(Projeto $projeto, ProjetoEquipe $equipe)
     {
-        $this->authorize('forceDelete', $atividade);
-
-        $atividade->forceDelete();
-
-        return redirect()->route('projetos.atividades.index', ['projeto' => $projeto])
-            ->with('success', 'Atividade excluída permanentemente.');
+        return view('projetos.gestao.modals.equipes-edit', compact('projeto', 'equipe'));
     }
 }
 

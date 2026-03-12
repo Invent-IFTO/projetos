@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Convite;
 use App\Models\User;
 use Illuminate\Foundation\Auth\RegistersUsers;
 use Illuminate\Support\Facades\Hash;
@@ -50,7 +51,7 @@ class RegisterController extends Controller
     {
         return Validator::make($data, [
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users', 'exists:convites,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
     }
@@ -61,12 +62,21 @@ class RegisterController extends Controller
      * @param  array  $data
      * @return \App\Models\User
      */
-    protected function create(array $data)
+    protected function create(Convite $convite, string $hash, array $data)
     {
         return User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
         ]);
+    }
+
+    protected function showRegistrationForm(Convite $convite, string $hash)
+    {
+        if ($convite->hash() !== $hash || $convite->used_at) {
+            abort(404);
+        }
+
+        return view('auth.register', ['convite' => $convite]);
     }
 }

@@ -21,7 +21,7 @@ class ProjetoMembroFactory extends Factory
             'equipe_id' => \App\Models\ProjetoEquipe::factory(),
             'user_id' => \App\Models\User::factory(),
             'lider_equipe' => $this->faker->boolean(20), // 20% chance de ser líder de equipe
-            'lider_projeto' => $this->faker->boolean(10), // 10% chance de ser líder de projeto
+            'gerente_projeto' => $this->faker->boolean(10), // 10% chance de ser gerente de projeto
         ];
     }
 }

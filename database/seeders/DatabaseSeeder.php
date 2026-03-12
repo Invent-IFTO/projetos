@@ -21,31 +21,47 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        for($i = 1; $i < 10; $i++){
+            User::factory()->create(["email" => "user$i@example.com"]);
+        }
 
         $user = User::factory()->create([
             'name' => 'Joaquim Martins Scavone',
             'email' => 'joaquim.scavone@ifto.edu.br',
-            'password' => Hash::make(value: 'projetos@ifto'),
         ]);
 
-        Projeto::create([
-            'titulo' => 'IService',
-            'descricao' => 'Este é um projeto de exemplo para demonstração.',
-            'criador_id' => $user->id,
-        ]);
+        // $user = User::find(7);
 
-        ProjetoEquipe::create([
-            'projeto_id' => 1,
-            'descricao' => 'Equipe de Gestão',]);
-        ProjetoMembro::create([
-            'equipe_id' => 1,
-            'projeto_id' => 1,
-            'user_id' => $user->id,
-            'lider_equipe' => true,
-        ]);
+        // Projeto::create([
+        //     'titulo' => 'IService',
+        //     'descricao' => 'Este é um projeto de exemplo para demonstração.',
+        //     'criador_id' => $user->id,
+        // ]);
+
+        // ProjetoEquipe::create([
+        //     'projeto_id' => 1,
+        //     'descricao' => 'Equipe de Gestão',]);
+
+        // ProjetoMembro::create([
+        //     'equipe_id' => 1,
+        //     'projeto_id' => 1,
+        //     'user_id' => $user->id,
+        //     'lider_equipe' => true,
+        // ]);
         $this->call(PermissionsSeeder::class);
-        Role::create(['name' => 'Desenvolvedor'])->givePermissionTo(Permission::all());
-        $user->syncRoles(['Desenvolvedor']);
+        Role::findOrCreate('Gerente')->givePermissionTo(Permission::all());
+        
+        Role::findOrCreate('Aluno');
+        foreach($user::all() as $cliente){
+                $cliente->syncRoles(['Aluno']);
+                // ProjetoMembro::create([
+                // 'equipe_id' => 1,
+                // 'projeto_id' => 1,
+                // 'user_id' => $user->id,
+                // 'lider_equipe' => true,
+                // ]);
+        }
+        $user->syncRoles(['Gerente']);
+        $this->call(ConfigsSeeder::class);
     }
 }
